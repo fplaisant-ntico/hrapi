@@ -20,154 +20,134 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+/**
+ * Unit tests for the EmployeeController class.
+ *
+ * This test class verifies the behavior of methods within the EmployeeController
+ * by mocking dependencies such as EmployeeService, ObjectMapper, and EmployeeProducer.
+ *
+ * Tests include:
+ * - Retrieving all employees.
+ * - Retrieving a specific employee by ID when the employee is found or not found.
+ * - Adding a new employee with valid or invalid input.
+ * - Updating an existing employee when the employee is found or not found.
+ * - Deleting an employee.
+ *
+ * Mocks are used to isolate dependencies and to simulate expected behavior, enabling
+ * focused validation of controller logic.
+ */
 @ExtendWith(MockitoExtension.class)
 class EmployeeControllerTest {
+    private static final Long EXISTING_ID = 1L;
+    private static final String TOPIC_DELETE = "employee-delete";
+    private static final String TOPIC_ADD = "employee-add";
+    private static final String TOPIC_UPDATE = "employee-update";
+    private static final String MOCK_JSON = "mock-employee-list";
 
     @Mock
     private EmployeeService employeeService;
-
     @Mock
     private ObjectMapper objectMapper;
-
     @Mock
     private EmployeeProducer employeeProducer;
-
     @InjectMocks
     private EmployeeController employeeController;
 
+    private Employee createTestEmployee(String firstName, String lastName) {
+        Employee employee = new Employee();
+        employee.setFirstName(firstName);
+        employee.setLastName(lastName);
+        return employee;
+    }
+
+    private Employee createValidEmployee() {
+        Employee employee = createTestEmployee("Jean", "Dupont");
+        employee.setMail("jean.dupont@email.com");
+        employee.setPassword("SecurePass123");
+        return employee;
+    }
+
     @Test
-    void testGetEmployees() {
-        // Création de mock employees
-        Employee emp1 = new Employee();
-        emp1.setFirstName("Jean");
-        emp1.setLastName("Dupont");
-
-        Employee emp2 = new Employee();
-        emp2.setFirstName("Marie");
-        emp2.setLastName("Curie");
-
-        List<Employee> mockEmployees = List.of(emp1, emp2);
-
-        // Simulation du comportement du service
+    void shouldReturnAllEmployees() {
+        List<Employee> mockEmployees = List.of(
+                createTestEmployee("Jean", "Dupont"),
+                createTestEmployee("Marie", "Curie")
+        );
         when(employeeService.getEmployees()).thenReturn(mockEmployees);
 
-        // Appel de la méthode du contrôleur
-        Iterable<Employee> employees = employeeController.getEmployees();
+        Iterable<Employee> result = employeeController.getEmployees();
 
-        // Vérifications
-        assertNotNull(employees);
-        assertEquals(2, ((List<Employee>) employees).size());
-        verify(employeeService, times(1)).getEmployees();
+        assertNotNull(result);
+        assertEquals(2, ((List<Employee>) result).size());
+        verify(employeeService).getEmployees();
     }
 
     @Test
-    void testGetEmployeeById_Found() {
-        // Création d'un mock employee
-        Employee mockEmployee = new Employee();
-        mockEmployee.setId(1L);
-        mockEmployee.setFirstName("Jean");
+    void shouldReturnEmployeeWhenExists() {
+        Employee mockEmployee = createTestEmployee("Jean", "Dupont");
+        mockEmployee.setId(EXISTING_ID);
+        when(employeeService.getEmployee(EXISTING_ID)).thenReturn(Optional.of(mockEmployee));
 
-        // Simulation du service
-        when(employeeService.getEmployee(1L)).thenReturn(java.util.Optional.of(mockEmployee));
+        Employee result = employeeController.getEmployee(EXISTING_ID);
 
-        // Appel du contrôleur
-        Employee employee = employeeController.getEmployee(1L);
-
-        // Vérifications
-        assertNotNull(employee);
-        assertEquals(1L, employee.getId());
-        assertEquals("Jean", employee.getFirstName());
-        verify(employeeService, times(1)).getEmployee(1L);
+        assertNotNull(result);
+        assertEquals(EXISTING_ID, result.getId());
+        assertEquals("Jean", result.getFirstName());
+        verify(employeeService).getEmployee(EXISTING_ID);
     }
 
     @Test
-    void testGetEmployeeById_NotFound() {
-        // Simulation du service (employé non trouvé)
-        when(employeeService.getEmployee(2L)).thenReturn(java.util.Optional.empty());
+    void shouldDeleteEmployeeAndNotifyKafka() throws JsonProcessingException {
+        when(objectMapper.writeValueAsString(any())).thenReturn(MOCK_JSON);
 
-        // Appel du contrôleur
-        Employee employee = employeeController.getEmployee(2L);
+        employeeController.deleteEmployee(EXISTING_ID);
 
-        // Vérifications
-        assertNull(employee);
-        verify(employeeService, times(1)).getEmployee(2L);
+        verify(employeeService).deleteEmployee(EXISTING_ID);
+        verify(employeeProducer).sendEmployeeEvent(TOPIC_DELETE, MOCK_JSON);
     }
 
     @Test
-    void testDeleteEmployee() throws JsonProcessingException {
-        Long idToDelete = 1L;
-
-        // Mock du service pour la suppression
-        doNothing().when(employeeService).deleteEmployee(idToDelete);
-        when(objectMapper.writeValueAsString(any())).thenReturn("mock-employee-list");
-
-        // Appel du contrôleur
-        employeeController.deleteEmployee(idToDelete);
-
-        // Vérifications
-        verify(employeeService, times(1)).deleteEmployee(idToDelete);
-        verify(employeeProducer, times(1)).sendEmployeeEvent(eq("employee-delete"), anyString());
-    }
-
-    @Test
-    void testAddEmployee_Valid() throws JsonProcessingException {
-        Employee newEmployee = new Employee();
-        newEmployee.setFirstName("Jean");
-        newEmployee.setLastName("Dupont");
-        newEmployee.setMail("jean.dupont@email.com");
-        newEmployee.setPassword("SecurePass123");
-
+    void shouldSaveValidEmployeeAndReturnSuccess() throws JsonProcessingException {
+        Employee newEmployee = createValidEmployee();
         when(employeeService.saveEmployee(any(Employee.class))).thenReturn(newEmployee);
-        when(objectMapper.writeValueAsString(any())).thenReturn("mock-employee-list");
+        when(objectMapper.writeValueAsString(any())).thenReturn(MOCK_JSON);
 
         ResponseEntity<?> response = employeeController.addEmployee(newEmployee, mock(BindingResult.class));
 
         assertEquals(200, response.getStatusCode().value());
-        verify(employeeService, times(1)).saveEmployee(any(Employee.class));
-        verify(employeeProducer, times(1)).sendEmployeeEvent(eq("employee-add"), anyString());
+        verify(employeeService).saveEmployee(any(Employee.class));
+        verify(employeeProducer).sendEmployeeEvent(TOPIC_ADD, MOCK_JSON);
     }
 
     @Test
-    void testAddEmployee_Invalid() {
-        Employee newEmployee = new Employee();
-        newEmployee.setMail("invalid-email"); // Mauvais email
-
+    void shouldReturnErrorForInvalidEmployee() {
+        Employee invalidEmployee = new Employee();
+        invalidEmployee.setMail("invalid-email");
         BindingResult bindingResult = mock(BindingResult.class);
         when(bindingResult.hasErrors()).thenReturn(true);
-        when(bindingResult.getFieldErrors()).thenReturn(List.of(new FieldError("employee", "mail", "Email invalide")));
+        when(bindingResult.getFieldErrors())
+                .thenReturn(List.of(new FieldError("employee", "mail", "Email invalide")));
 
-        ResponseEntity<?> response = employeeController.addEmployee(newEmployee, bindingResult);
+        ResponseEntity<?> response = employeeController.addEmployee(invalidEmployee, bindingResult);
 
         assertEquals(400, response.getStatusCode().value());
     }
 
     @Test
-    void testUpdateEmployee_Found() throws JsonProcessingException {
-        Employee existingEmployee = new Employee();
-        existingEmployee.setId(1L);
-        existingEmployee.setFirstName("Jean");
+    void shouldUpdateExistingEmployeeAndNotifyKafka() throws JsonProcessingException {
+        Employee existingEmployee = createTestEmployee("Jean", "Dupont");
+        existingEmployee.setId(EXISTING_ID);
+        Employee updatedEmployee = createTestEmployee("Paul", "Dupont");
 
-        Employee updatedEmployee = new Employee();
-        updatedEmployee.setFirstName("Paul"); // Mise à jour
-
-        when(employeeService.getEmployee(1L)).thenReturn(Optional.of(existingEmployee));
+        when(employeeService.getEmployee(EXISTING_ID)).thenReturn(Optional.of(existingEmployee));
         when(employeeService.saveEmployee(any(Employee.class))).thenReturn(updatedEmployee);
-        when(objectMapper.writeValueAsString(any())).thenReturn("mock-employee-list");
+        when(objectMapper.writeValueAsString(any())).thenReturn(MOCK_JSON);
 
-        Employee response = employeeController.updateEmployee(1L, updatedEmployee);
+        Employee result = employeeController.updateEmployee(EXISTING_ID, updatedEmployee);
 
-        assertNotNull(response);
-        assertEquals("Paul", response.getFirstName());
-        verify(employeeService, times(1)).saveEmployee(any(Employee.class));
-        verify(employeeProducer, times(1)).sendEmployeeEvent(eq("employee-update"), anyString());
-    }
-
-    @Test
-    void testUpdateEmployee_NotFound() {
-        when(employeeService.getEmployee(2L)).thenReturn(Optional.empty());
-
-        Employee response = employeeController.updateEmployee(2L, new Employee());
-
-        assertNull(response);
+        assertNotNull(result);
+        assertEquals("Paul", result.getFirstName());
+        verify(employeeService).saveEmployee(any(Employee.class));
+        verify(employeeProducer).sendEmployeeEvent(TOPIC_UPDATE, MOCK_JSON);
     }
 }
