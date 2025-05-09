@@ -1,0 +1,11 @@
+com\fplaisant\hrapi\service\JWTService.class
+com\fplaisant\hrapi\HrapiApplication.class
+com\fplaisant\hrapi\repository\EmployeeRepository.class
+com\fplaisant\hrapi\service\EmployeeProducer.class
+com\fplaisant\hrapi\controller\EmployeeController.class
+com\fplaisant\hrapi\model\Employee.class
+com\fplaisant\hrapi\controller\LoginController.class
+com\fplaisant\hrapi\config\WebConfig.class
+com\fplaisant\hrapi\service\EmployeeService.class
+com\fplaisant\configuration\SecurityConfig.class
+com\fplaisant\hrapi\config\WebSocketConfig.class
