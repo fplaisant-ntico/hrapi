@@ -40,7 +40,7 @@ class EmployeeTest {
         employee.setFirstName("Jean");
         employee.setLastName("Dupont");
         employee.setMail("invalid-email");  // Email incorrect
-        employee.setPassword("SecurePass123");
+        employee.setPassword("SecurePass1234");
 
         Set<ConstraintViolation<Employee>> violations = validator.validate(employee);
         assertFalse(violations.isEmpty(), "L'email est invalide et devrait générer une erreur");
