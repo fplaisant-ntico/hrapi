@@ -35,4 +35,6 @@ jobs:
           sudo chmod +x /usr/local/bin/docker-compose
 
       - name: Déployer avec Docker Compose
-        run: docker-compose up -d
+        run: |
+          cd ..
+          docker-compose up -d
